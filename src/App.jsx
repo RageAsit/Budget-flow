@@ -32,7 +32,7 @@ import {
   X
 } from 'lucide-react';
 
-// --- 1. YOUR API KEYS (Already Filled In) ---
+// --- 1. API KEYS (PRE-FILLED) ---
 
 const firebaseConfig = {
   apiKey: "AIzaSyCGpFx0dHogy6QppuIm8eO4T5lAmBZtOZc",
@@ -46,7 +46,7 @@ const firebaseConfig = {
 
 const geminiApiKey = "AIzaSyDvR8XqYk910SaNvc7XlIutOzuayt6t9Xs";
 
-// This organizes your data. You can keep this as is.
+// This organizes your data under your specific project ID
 const appId = "my-personal-budget"; 
 
 // --- Initialization ---
@@ -61,7 +61,6 @@ try {
 
 // --- Gemini API Helper ---
 const callGeminiAPI = async (prompt, jsonMode = false) => {
-  // Using the standard model that works with your key
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
   
   const payload = {
@@ -88,7 +87,6 @@ const callGeminiAPI = async (prompt, jsonMode = false) => {
 
 // --- Components ---
 
-// 1. Summary Card Component
 const SummaryCard = ({ title, amount, type, icon: Icon, subLabel }) => {
   const colorClass = 
     type === 'income' ? 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20' : 
@@ -112,7 +110,6 @@ const SummaryCard = ({ title, amount, type, icon: Icon, subLabel }) => {
   );
 };
 
-// 2. Simple Progress Bar for Categories
 const CategoryBar = ({ label, amount, total, color }) => {
   const percentage = total > 0 ? (amount / total) * 100 : 0;
   
@@ -132,15 +129,12 @@ const CategoryBar = ({ label, amount, total, color }) => {
   );
 };
 
-// 3. Main App Component
 export default function App() {
   const [user, setUser] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard'); 
-  
-  // Date Filter State
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
   // Form State
   const [amount, setAmount] = useState('');
@@ -148,6 +142,7 @@ export default function App() {
   const [category, setCategory] = useState('Food');
   const [type, setType] = useState('expense');
   const [mode, setMode] = useState('Online');
+  const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0]); // Default to today
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // AI Feature States
@@ -185,11 +180,15 @@ export default function App() {
 
     const unsubscribeDocs = onSnapshot(q, 
       (snapshot) => {
-        const docs = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate() || new Date()
-        }));
+        const docs = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                ...data,
+                // Handle cases where date might be missing or different format
+                createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt)
+            };
+        });
         
         docs.sort((a, b) => b.createdAt - a.createdAt);
         
@@ -233,8 +232,9 @@ export default function App() {
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
-      const tMonth = t.createdAt.toISOString().slice(0, 7); 
-      return tMonth === selectedMonth;
+        if(!t.createdAt) return false;
+        const tMonth = t.createdAt.toISOString().slice(0, 7); 
+        return tMonth === selectedMonth;
     });
   }, [transactions, selectedMonth]);
   
@@ -331,26 +331,40 @@ export default function App() {
 
   const handleAddTransaction = async (e) => {
     e.preventDefault();
-    if (!amount || !subject || !user) return;
+    
+    if (!user) {
+        alert("Authentication Error: You must be logged in to save entries. Check your internet connection.");
+        return;
+    }
+    if (!amount || !subject) {
+        alert("Please enter an amount and a subject.");
+        return;
+    }
     
     setIsSubmitting(true);
     try {
+      // Create a Date object from the input value (which is YYYY-MM-DD)
+      // We set time to noon to avoid timezone shifts changing the day
+      const selectedDate = new Date(entryDate + 'T12:00:00');
+
       await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'transactions'), {
         amount: parseFloat(amount),
         description: subject,
         category,
         type, 
         mode,
-        createdAt: serverTimestamp()
+        createdAt: selectedDate // Using the selected date instead of serverTimestamp
       });
       
       setAmount('');
       setSubject('');
       setSmartInput('');
+      setEntryDate(new Date().toISOString().split('T')[0]); // Reset to today
       setIsSubmitting(false);
       setActiveTab('dashboard');
     } catch (error) {
       console.error("Error adding document: ", error);
+      alert("Failed to save. Check console for details.");
       setIsSubmitting(false);
     }
   };
@@ -651,6 +665,18 @@ export default function App() {
               </h2>
               <form onSubmit={handleAddTransaction} className="space-y-6">
                 
+                {/* Date Picker (NEW) */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={entryDate}
+                    onChange={(e) => setEntryDate(e.target.value)}
+                    className="w-full px-4 py-3.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none text-white transition-all"
+                  />
+                </div>
+
                 {/* Type Selector */}
                 <div className="grid grid-cols-2 gap-4 bg-slate-950 p-1 rounded-xl border border-slate-800">
                   <button
