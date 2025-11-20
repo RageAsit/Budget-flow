@@ -118,8 +118,6 @@ const CategoryBar = ({ label, amount, total, color }) => {
 export default function App() {
   const [user, setUser] = useState(null);
   const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true); 
-  // CRITICAL: Start authChecking as TRUE to block login screen until verified
   const [authChecking, setAuthChecking] = useState(true); 
   const [activeTab, setActiveTab] = useState('dashboard'); 
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -143,29 +141,29 @@ export default function App() {
 
     const initAuth = async () => {
       try {
-        // 1. First, check if we just came back from Google redirect
+        // 1. Check if we are coming back from a redirect login
         const result = await getRedirectResult(auth);
-        if (result?.user) {
-          console.log("Logged in via redirect:", result.user);
-          if(isMounted) {
-             setUser(result.user);
-             setAuthChecking(false); // Stop loading immediately
-             return;
+        if (result && result.user) {
+          console.log("User logged in via redirect:", result.user);
+          if (isMounted) {
+            setUser(result.user);
+            setAuthChecking(false); // Stop checking, we have a user!
+            return;
           }
         }
       } catch (error) {
-        console.error("Redirect error:", error);
+        console.error("Redirect login error:", error);
       }
 
-      // 2. If no redirect result, check current session
+      // 2. If no redirect result, listen for normal session state
       const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
         if (isMounted) {
+          console.log("Auth state changed:", currentUser);
           setUser(currentUser);
-          setAuthChecking(false); // Firebase has confirmed state
-          setLoading(false); 
+          setAuthChecking(false); // Firebase confirmed state (logged in or out)
         }
       });
-      
+
       return unsubscribe;
     };
 
@@ -196,11 +194,10 @@ export default function App() {
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      setLoading(true); // Show loading spinner immediately
+      // No loading state here because the page will navigate away instantly
       await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error("Login Failed:", error);
-      setLoading(false);
       alert(`Login failed: ${error.message}`);
     }
   };
@@ -274,7 +271,8 @@ export default function App() {
   };
   const handleDelete = async (id) => { if (!user) return; try { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'transactions', id)); } catch (error) { console.error("Error deleting:", error); } };
 
-  // --- CRITICAL FIX: Wait for Auth Check before showing anything ---
+  // --- LOADING VIEW ---
+  // Block everything until we know the user status
   if (authChecking) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-cyan-500">
@@ -286,8 +284,6 @@ export default function App() {
     );
   }
 
-  // If we are here, authChecking is false. We definitely know if user is logged in or not.
-  
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 font-sans text-slate-200 selection:bg-cyan-500/30">
@@ -481,7 +477,7 @@ export default function App() {
                 <div key={t.id} className="p-5 hover:bg-slate-800/50 flex items-center justify-between group transition-colors">
                   <div className="flex items-center gap-4">
                     <div className={`p-3 rounded-full ${t.type === 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>{t.type === 'income' ? <TrendingUp size={20} /> : <TrendingDown size={20} />}</div>
-                    <div><p className="font-semibold text-slate-200">{t.description}</p><div className="flex items-center gap-2 text-xs text-slate-500 mt-1"><span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-slate-400">{t.mode}</span><span>•</span><span>{t.category}</span><span>•</span><span>{t.createdAt.toLocaleDateString()}</span></div></div>
+                    <div><p className="font-semibold text-slate-200">{t.description}</p><div className="flex items-center gap-2 text-xs text-slate-500 mt-1"><span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-slate-400">{t.mode}</span><span>•</span><span>{t.category}</span><span>•</span><span>{t.createdAt.toLocaleDateString()} {t.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div></div>
                   </div>
                   <div className="flex items-center gap-4"><span className={`font-bold text-lg ${t.type === 'income' ? 'text-emerald-400' : 'text-slate-200'}`}>{t.type === 'income' ? '+' : '-'}₹{Number(t.amount).toLocaleString('en-IN')}</span><button onClick={() => handleDelete(t.id)} className="p-2 text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100" title="Delete"><Trash2 size={18} /></button></div>
                 </div>
