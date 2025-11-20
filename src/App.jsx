@@ -3,7 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
   GoogleAuthProvider,
-  signInWithPopup,
+  signInWithRedirect, // <--- CHANGED THIS
   signOut,
   onAuthStateChanged 
 } from 'firebase/auth';
@@ -63,9 +63,7 @@ try {
 
 // --- Gemini API Helper ---
 const callGeminiAPI = async (prompt, jsonMode = false) => {
-  // Using standard public model
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
-  
   const payload = {
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: jsonMode ? { responseMimeType: "application/json" } : undefined
@@ -79,7 +77,6 @@ const callGeminiAPI = async (prompt, jsonMode = false) => {
     });
 
     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    
     const data = await response.json();
     return data.candidates?.[0]?.content?.parts?.[0]?.text;
   } catch (error) {
@@ -138,7 +135,7 @@ export default function App() {
   const [aiInsight, setAiInsight] = useState(null);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
 
-  // AUTH: Listen for user state (We removed anonymous auto-login)
+  // AUTH: Listen for user state
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -147,7 +144,7 @@ export default function App() {
     return () => unsubscribeAuth();
   }, []);
 
-  // FIRESTORE: Fetch data only if user is logged in
+  // FIRESTORE: Fetch data
   useEffect(() => {
     if (!user) return;
     const q = collection(db, 'artifacts', appId, 'users', user.uid, 'transactions');
@@ -166,14 +163,16 @@ export default function App() {
     return () => unsubscribeDocs();
   }, [user]);
 
-  // --- Google Login/Logout Functions ---
+  // --- Google Login (REDIRECT METHOD) ---
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
+      // Changed from signInWithPopup to signInWithRedirect for better mobile support
+      await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error("Login Failed:", error);
-      alert("Login failed. Make sure you enabled Google Auth in Firebase Console.");
+      // Alert the ACTUAL error message so we can debug
+      alert(`Login failed: ${error.message}`);
     }
   };
 
@@ -248,7 +247,6 @@ export default function App() {
 
   if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-cyan-500"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div></div>;
 
-  // --- LOGIN SCREEN (Shown when no user is logged in) ---
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 font-sans text-slate-200 selection:bg-cyan-500/30">
@@ -276,7 +274,6 @@ export default function App() {
     );
   }
 
-  // --- DASHBOARD (Shown when user IS logged in) ---
   return (
     <div className="min-h-screen bg-slate-950 font-sans text-slate-200 pb-24 md:pb-0 selection:bg-cyan-500/30">
       <header className="bg-slate-900/50 backdrop-blur-xl border-b border-slate-800 pt-6 pb-24 px-6 relative z-0">
