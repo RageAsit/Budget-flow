@@ -39,7 +39,7 @@ import {
 
 // --- 1. YOUR SPECIFIC KEYS (PRE-FILLED) ---
 const firebaseConfig = {
-  apiKey: "AIzaSyCGpFx0dHogy6QppuIm8eO4T5lAmBZtOZc",
+  apiKey: "AIzaSyCGpFX0dHogy6QppuIm8eO4T5lAmBZtOZc",
   authDomain: "budgetflow-c179c.firebaseapp.com",
   projectId: "budgetflow-c179c",
   storageBucket: "budgetflow-c179c.firebasestorage.app",
