@@ -4,7 +4,7 @@ import {
   getAuth, 
   GoogleAuthProvider,
   signInWithRedirect, 
-  getRedirectResult, // <--- NEW IMPORT
+  getRedirectResult, 
   signOut,
   onAuthStateChanged 
 } from 'firebase/auth';
@@ -118,7 +118,7 @@ const CategoryBar = ({ label, amount, total, color }) => {
 export default function App() {
   const [user, setUser] = useState(null);
   const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true); // Start loading true!
+  const [loading, setLoading] = useState(true); 
   const [activeTab, setActiveTab] = useState('dashboard'); 
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
@@ -135,25 +135,34 @@ export default function App() {
   const [aiInsight, setAiInsight] = useState(null);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
 
-  // AUTH: Listen for user state AND Redirect Results
+  // AUTH: Robust Redirect Logic
   useEffect(() => {
-    // 1. Check if we are returning from a redirect
-    getRedirectResult(auth).then((result) => {
-      if (result) {
-        console.log("Redirect login success:", result.user);
-        setUser(result.user);
-      }
-    }).catch((error) => {
-      console.error("Redirect login error:", error);
-      alert("Login Error: " + error.message);
-    });
+    let isMounted = true;
 
-    // 2. Listen for normal auth state changes
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setLoading(false); // Only stop loading when Firebase has decided!
-    });
-    return () => unsubscribeAuth();
+    const handleAuth = async () => {
+      try {
+        // 1. Check for redirect result first
+        const result = await getRedirectResult(auth);
+        if (result?.user) {
+          console.log("Redirect login success:", result.user);
+          if (isMounted) setUser(result.user);
+        }
+      } catch (error) {
+        console.error("Redirect login error:", error);
+      } finally {
+        // 2. Listen for auth state (this handles persistence)
+        onAuthStateChanged(auth, (currentUser) => {
+          if (isMounted) {
+            setUser(currentUser);
+            setLoading(false); // Stop loading only after we know the user status
+          }
+        });
+      }
+    };
+
+    handleAuth();
+
+    return () => { isMounted = false; };
   }, []);
 
   // FIRESTORE: Fetch data
@@ -179,7 +188,7 @@ export default function App() {
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      setLoading(true); // Show loading spinner while redirecting
+      setLoading(true); // Show loading spinner immediately
       await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error("Login Failed:", error);
@@ -263,7 +272,7 @@ export default function App() {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-cyan-500">
         <div className="flex flex-col items-center gap-4">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
-          <p className="text-slate-400 text-sm">Connecting securely...</p>
+          <p className="text-slate-400 text-sm">Syncing your profile...</p>
         </div>
       </div>
     );
@@ -462,7 +471,7 @@ export default function App() {
                 <div key={t.id} className="p-5 hover:bg-slate-800/50 flex items-center justify-between group transition-colors">
                   <div className="flex items-center gap-4">
                     <div className={`p-3 rounded-full ${t.type === 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>{t.type === 'income' ? <TrendingUp size={20} /> : <TrendingDown size={20} />}</div>
-                    <div><p className="font-semibold text-slate-200">{t.description}</p><div className="flex items-center gap-2 text-xs text-slate-500 mt-1"><span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-slate-400">{t.mode}</span><span>•</span><span>{t.category}</span><span>•</span><span>{t.createdAt.toLocaleDateString()} {t.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div></div>
+                    <div><p className="font-semibold text-slate-200">{t.description}</p><div className="flex items-center gap-2 text-xs text-slate-500 mt-1"><span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-slate-400">{t.mode}</span><span>•</span><span>{t.category}</span><span>•</span><span>{t.createdAt.toLocaleDateString()}</span></div></div>
                   </div>
                   <div className="flex items-center gap-4"><span className={`font-bold text-lg ${t.type === 'income' ? 'text-emerald-400' : 'text-slate-200'}`}>{t.type === 'income' ? '+' : '-'}₹{Number(t.amount).toLocaleString('en-IN')}</span><button onClick={() => handleDelete(t.id)} className="p-2 text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100" title="Delete"><Trash2 size={18} /></button></div>
                 </div>
