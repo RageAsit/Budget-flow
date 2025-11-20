@@ -3,7 +3,8 @@ import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
   GoogleAuthProvider,
-  signInWithRedirect, // <--- CHANGED THIS
+  signInWithRedirect, 
+  getRedirectResult, // <--- NEW IMPORT
   signOut,
   onAuthStateChanged 
 } from 'firebase/auth';
@@ -37,9 +38,8 @@ import {
 } from 'lucide-react';
 
 // --- 1. YOUR SPECIFIC KEYS (PRE-FILLED) ---
-
 const firebaseConfig = {
-  apiKey: "AIzaSyCGpFX0dHogy6QppuIm8eO4T5lAmBZtOZc",
+  apiKey: "AIzaSyCGpFx0dHogy6QppuIm8eO4T5lAmBZtOZc",
   authDomain: "budgetflow-c179c.firebaseapp.com",
   projectId: "budgetflow-c179c",
   storageBucket: "budgetflow-c179c.firebasestorage.app",
@@ -48,7 +48,7 @@ const firebaseConfig = {
   measurementId: "G-YRE4K43WMJ"
 };
 
-const geminiApiKey = "AIzaSyC-XQhe3XV8Qz3lcbu83tjiGF0VUVCRn2A";
+const geminiApiKey = "AIzaSyDvR8XqYk910SaNvc7XlIutOzuayt6t9Xs";
 const appId = "my-personal-budget"; 
 
 // --- Initialization ---
@@ -118,7 +118,7 @@ const CategoryBar = ({ label, amount, total, color }) => {
 export default function App() {
   const [user, setUser] = useState(null);
   const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // Start loading true!
   const [activeTab, setActiveTab] = useState('dashboard'); 
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
@@ -135,11 +135,23 @@ export default function App() {
   const [aiInsight, setAiInsight] = useState(null);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
 
-  // AUTH: Listen for user state
+  // AUTH: Listen for user state AND Redirect Results
   useEffect(() => {
+    // 1. Check if we are returning from a redirect
+    getRedirectResult(auth).then((result) => {
+      if (result) {
+        console.log("Redirect login success:", result.user);
+        setUser(result.user);
+      }
+    }).catch((error) => {
+      console.error("Redirect login error:", error);
+      alert("Login Error: " + error.message);
+    });
+
+    // 2. Listen for normal auth state changes
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      setLoading(false);
+      setLoading(false); // Only stop loading when Firebase has decided!
     });
     return () => unsubscribeAuth();
   }, []);
@@ -167,11 +179,11 @@ export default function App() {
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      // Changed from signInWithPopup to signInWithRedirect for better mobile support
+      setLoading(true); // Show loading spinner while redirecting
       await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error("Login Failed:", error);
-      // Alert the ACTUAL error message so we can debug
+      setLoading(false);
       alert(`Login failed: ${error.message}`);
     }
   };
@@ -245,7 +257,17 @@ export default function App() {
   };
   const handleDelete = async (id) => { if (!user) return; try { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'transactions', id)); } catch (error) { console.error("Error deleting:", error); } };
 
-  if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-cyan-500"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div></div>;
+  // --- LOADING VIEW ---
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-cyan-500">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
+          <p className="text-slate-400 text-sm">Connecting securely...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -357,7 +379,7 @@ export default function App() {
                     {filteredTransactions.slice(0, 5).map((t) => (
                       <div key={t.id} className="p-4 hover:bg-slate-800/50 flex items-center justify-between group transition-colors">
                         <div className="flex items-center gap-4">
-                          <div className={`p-3 rounded-full ${t.type === 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>{t.type === 'income' ? <TrendingUp size={18} /> : <TrendingDown size={18} />}</div>
+                          <div className={`p-3 rounded-full ${t.type === 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>{t.type === 'income' ? <TrendingUp size={20} /> : <TrendingDown size={20} />}</div>
                           <div><p className="font-semibold text-slate-200">{t.description}</p><div className="flex items-center gap-2 text-xs text-slate-500 mt-1"><span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-slate-400">{t.mode}</span><span>•</span><span>{t.category}</span><span>•</span><span>{t.createdAt.toLocaleDateString()}</span></div></div>
                         </div>
                         <span className={`font-bold ${t.type === 'income' ? 'text-emerald-400' : 'text-slate-200'}`}>{t.type === 'income' ? '+' : '-'}₹{Number(t.amount).toLocaleString('en-IN')}</span>
