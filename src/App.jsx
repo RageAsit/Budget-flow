@@ -119,7 +119,8 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true); 
-  const [authChecking, setAuthChecking] = useState(true); // New state to track initial auth check
+  // CRITICAL: Start authChecking as TRUE to block login screen until verified
+  const [authChecking, setAuthChecking] = useState(true); 
   const [activeTab, setActiveTab] = useState('dashboard'); 
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
 
@@ -136,29 +137,40 @@ export default function App() {
   const [aiInsight, setAiInsight] = useState(null);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
 
-  // AUTH: Improved Logic
+  // AUTH: Robust Redirect Logic
   useEffect(() => {
-    // Handle Redirect Result
-    getRedirectResult(auth)
-      .then((result) => {
+    let isMounted = true;
+
+    const initAuth = async () => {
+      try {
+        // 1. First, check if we just came back from Google redirect
+        const result = await getRedirectResult(auth);
         if (result?.user) {
-          console.log("Redirect login success:", result.user);
-          setUser(result.user);
+          console.log("Logged in via redirect:", result.user);
+          if(isMounted) {
+             setUser(result.user);
+             setAuthChecking(false); // Stop loading immediately
+             return;
+          }
         }
-      })
-      .catch((error) => {
-        console.error("Redirect login error:", error);
+      } catch (error) {
+        console.error("Redirect error:", error);
+      }
+
+      // 2. If no redirect result, check current session
+      const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+        if (isMounted) {
+          setUser(currentUser);
+          setAuthChecking(false); // Firebase has confirmed state
+          setLoading(false); 
+        }
       });
+      
+      return unsubscribe;
+    };
 
-    // Main Auth Listener
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      console.log("Auth state changed:", currentUser);
-      setUser(currentUser);
-      setAuthChecking(false); // Only stop loading once we are SURE about auth state
-      setLoading(false); 
-    });
-
-    return () => unsubscribeAuth();
+    initAuth();
+    return () => { isMounted = false; };
   }, []);
 
   // FIRESTORE: Fetch data
@@ -262,19 +274,20 @@ export default function App() {
   };
   const handleDelete = async (id) => { if (!user) return; try { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'transactions', id)); } catch (error) { console.error("Error deleting:", error); } };
 
-  // --- LOADING VIEW ---
-  // Show loading ONLY while initially checking auth state
+  // --- CRITICAL FIX: Wait for Auth Check before showing anything ---
   if (authChecking) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-cyan-500">
         <div className="flex flex-col items-center gap-4">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
-          <p className="text-slate-400 text-sm">Initializing...</p>
+          <p className="text-slate-400 text-sm">Verifying login...</p>
         </div>
       </div>
     );
   }
 
+  // If we are here, authChecking is false. We definitely know if user is logged in or not.
+  
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 font-sans text-slate-200 selection:bg-cyan-500/30">
@@ -285,25 +298,18 @@ export default function App() {
           <h1 className="text-3xl font-bold text-white mb-2">Welcome to BudgetFlow</h1>
           <p className="text-slate-400 mb-8">Your AI-powered financial command center.</p>
           
-          {loading ? (
-            <div className="w-full bg-slate-800 text-slate-400 font-bold py-4 rounded-xl flex items-center justify-center gap-3">
-               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-               Signing in...
-            </div>
-          ) : (
-            <button 
-              onClick={handleGoogleLogin}
-              className="w-full bg-white text-slate-900 hover:bg-slate-100 font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-3 shadow-lg"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-              </svg>
-              Sign in with Google
-            </button>
-          )}
+          <button 
+            onClick={handleGoogleLogin}
+            className="w-full bg-white text-slate-900 hover:bg-slate-100 font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-3 shadow-lg"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+            </svg>
+            Sign in with Google
+          </button>
         </div>
       </div>
     );
@@ -393,7 +399,7 @@ export default function App() {
                       <div key={t.id} className="p-4 hover:bg-slate-800/50 flex items-center justify-between group transition-colors">
                         <div className="flex items-center gap-4">
                           <div className={`p-3 rounded-full ${t.type === 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>{t.type === 'income' ? <TrendingUp size={20} /> : <TrendingDown size={20} />}</div>
-                          <div><p className="font-semibold text-slate-200">{t.description}</p><div className="flex items-center gap-2 text-xs text-slate-500 mt-1"><span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-slate-400">{t.mode}</span><span>•</span><span>{t.category}</span><span>•</span><span>{t.createdAt.toLocaleDateString()} {t.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div></div>
+                          <div><p className="font-semibold text-slate-200">{t.description}</p><div className="flex items-center gap-2 text-xs text-slate-500 mt-1"><span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-slate-400">{t.mode}</span><span>•</span><span>{t.category}</span><span>•</span><span>{t.createdAt.toLocaleDateString()}</span></div></div>
                         </div>
                         <span className={`font-bold ${t.type === 'income' ? 'text-emerald-400' : 'text-slate-200'}`}>{t.type === 'income' ? '+' : '-'}₹{Number(t.amount).toLocaleString('en-IN')}</span>
                       </div>
@@ -475,7 +481,7 @@ export default function App() {
                 <div key={t.id} className="p-5 hover:bg-slate-800/50 flex items-center justify-between group transition-colors">
                   <div className="flex items-center gap-4">
                     <div className={`p-3 rounded-full ${t.type === 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>{t.type === 'income' ? <TrendingUp size={20} /> : <TrendingDown size={20} />}</div>
-                    <div><p className="font-semibold text-slate-200">{t.description}</p><div className="flex items-center gap-2 text-xs text-slate-500 mt-1"><span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-slate-400">{t.mode}</span><span>•</span><span>{t.category}</span><span>•</span><span>{t.createdAt.toLocaleDateString()} {t.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div></div>
+                    <div><p className="font-semibold text-slate-200">{t.description}</p><div className="flex items-center gap-2 text-xs text-slate-500 mt-1"><span className="bg-slate-800 px-2 py-0.5 rounded border border-slate-700 text-slate-400">{t.mode}</span><span>•</span><span>{t.category}</span><span>•</span><span>{t.createdAt.toLocaleDateString()}</span></div></div>
                   </div>
                   <div className="flex items-center gap-4"><span className={`font-bold text-lg ${t.type === 'income' ? 'text-emerald-400' : 'text-slate-200'}`}>{t.type === 'income' ? '+' : '-'}₹{Number(t.amount).toLocaleString('en-IN')}</span><button onClick={() => handleDelete(t.id)} className="p-2 text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100" title="Delete"><Trash2 size={18} /></button></div>
                 </div>
