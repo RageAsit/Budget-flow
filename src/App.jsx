@@ -39,7 +39,7 @@ import {
 // --- 1. YOUR SPECIFIC KEYS (PRE-FILLED) ---
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCGpFx0dHogy6QppuIm8eO4T5lAmBZtOZc",
+  apiKey: "AIzaSyCGpFX0dHogy6QppuIm8eO4T5lAmBZtOZc",
   authDomain: "budgetflow-c179c.firebaseapp.com",
   projectId: "budgetflow-c179c",
   storageBucket: "budgetflow-c179c.firebasestorage.app",
@@ -48,7 +48,7 @@ const firebaseConfig = {
   measurementId: "G-YRE4K43WMJ"
 };
 
-const geminiApiKey = "AIzaSyDvR8XqYk910SaNvc7XlIutOzuayt6t9Xs";
+const geminiApiKey = "AIzaSyC-XQhe3XV8Qz3lcbu83tjiGF0VUVCRn2A";
 const appId = "my-personal-budget"; 
 
 // --- Initialization ---
